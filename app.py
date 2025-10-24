@@ -1,184 +1,192 @@
 import streamlit as st
 from PIL import Image
 import numpy as np
-import io
+import cv2
 import time
-import base64
+from streamlit_webrtc import webrtc_stream, VideoProcessorBase, VideoTransformerBase, WebRtcMode
+import av # Required by streamlit-webrtc
 
-# --- Configuration ---
+# --- Configuration & Setup ---
 st.set_page_config(
-    page_title="Deepfake Animator Agent",
-    page_icon="🎬",
+    page_title="Real-Time Deepfake Animator Agent",
+    page_icon="🎥",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# --- Helper Functions for Friendly UI ---
+# Initialize Session State
+if 'target_image' not in st.session_state:
+    st.session_state['target_image'] = None
+if 'animated_video_data' not in st.session_state:
+    st.session_state['animated_video_data'] = None
 
-def get_base64_image(image_path):
-    """Encodes a local image to base64 for use in Markdown (e.g., as an 'icon')."""
-    with open(image_path, "rb") as image_file:
-        return base64.b64encode(image_file.read()).decode()
-
-def local_css(file_name):
-    """Loads a local CSS file for custom styling."""
-    with open(file_name) as f:
-        st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
-
-def initialize_dummy_data():
-    """Initializes a list of 'target' images for the user to select."""
-    # NOTE: Replace these with actual paths to your sample images
-    try:
-        sample_images = {
-            "Avatar 1 (Classic)": Image.open("sample_avatar_1.jpg"),
-            "Avatar 2 (Casual)": Image.open("sample_avatar_2.png"),
-            "Avatar 3 (Historical)": Image.open("sample_avatar_3.png"),
-            "Upload Custom...": None # Placeholder for user upload
-        }
-        # In a real setup, ensure you have these images in the directory
-    except FileNotFoundError:
-        # Fallback if the image files don't exist
-        sample_images = {
-            "Avatar 1 (Classic)": Image.new('RGB', (100, 100), color = 'red'),
-            "Avatar 2 (Casual)": Image.new('RGB', (100, 100), color = 'blue'),
-            "Avatar 3 (Historical)": Image.new('RGB', (100, 100), color = 'green'),
-            "Upload Custom...": None
-        }
-    return sample_images
-
-# --- Core Deepfake Logic (Placeholder) ---
-
-@st.cache_data(show_spinner=False)
-def run_fomm_animation(target_image, driving_video):
-    """
-    PLACEHOLDER: This function simulates the heavy computation of the First Order Motion Model.
+# --- Helper Function for Target Images ---
+def initialize_target_data():
+    """Initializes target images (Human and Horse)."""
+    # Create simple dummy images for the UI framework
+    human_img = Image.new('RGB', (256, 256), color = '#FF5733')
+    horse_img = Image.new('RGB', (256, 256), color = '#33FF57')
     
-    In a real implementation, this is where you would:
-    1. Load the pre-trained FOMM model and weights.
-    2. Process the target_image (source).
-    3. Process the driving_video (motion source).
-    4. Run the deep learning inference to generate the output video.
+    # NOTE: In a real app, replace these with actual image loading
+    # e.g., Image.open("path/to/human_face.jpg")
     
-    Returns: A path or object representing the generated video/gif.
-    """
-    st.info("💡 **Deepfake Agent Working:** Initializing First Order Motion Model and inferring motion. This might take a moment...")
-    
-    # Simulate processing time
-    for i in range(10):
-        time.sleep(0.5)
-        st.progress((i + 1) / 10, text=f"Processing frames... {i * 10}% complete")
-    
-    st.success("✅ **Animation Complete!**")
-    
-    # Return a dummy animated image (or a path to a generated video file)
-    # NOTE: You must replace this with your actual generated video/GIF
-    return "dummy_animated_result.gif" 
+    return {
+        "Human Face (Avatar)": human_img,
+        "Horse (Animal)": horse_img,
+        "Upload Custom...": None 
+    }
 
-# --- UI Layout ---
+# --- Core Real-Time Deepfake Logic (PLACEHOLDER) ---
+
+# We use a custom VideoProcessor class to integrate with streamlit-webrtc.
+class FommVideoProcessor(VideoTransformerBase):
+    def __init__(self, target_img_np):
+        """Initializes the processor with the selected target image."""
+        self.target_img_np = target_img_np
+        self.frame_count = 0
+        # NOTE: Here is where you would initialize the FOMM model and load checkpoints
+
+    def transform(self, frame: av.VideoFrame) -> av.VideoFrame:
+        """
+        This method is called for every incoming video frame (from webcam).
+        
+        INPUT: frame (av.VideoFrame) - The live webcam frame.
+        OUTPUT: av.VideoFrame - The resulting animated frame.
+        """
+        
+        # Convert the incoming frame to OpenCV/NumPy format (BGR)
+        driving_frame_np = frame.to_ndarray(format="bgr24")
+        
+        # --- PLACEHOLDER FOR FOMM INFERENCE ---
+        
+        # 1. Preprocess the driving_frame_np (face detection, alignment)
+        # 2. Run FOMM: animated_frame = self.fomm_model.generate(self.target_img_np, driving_frame_np)
+        
+        # --- SIMULATION (Simple side-by-side display as a placeholder result) ---
+        
+        # Resize driving frame to match target image size for simulation
+        target_h, target_w, _ = self.target_img_np.shape
+        driving_resized = cv2.resize(driving_frame_np, (target_w, target_h))
+        
+        # Simple concatenation: Target Image | Driving Video (Simulates the output)
+        # In a real app, the right image would be the animated output.
+        animated_result_np = cv2.hconcat([
+            cv2.cvtColor(self.target_img_np, cv2.COLOR_RGB2BGR), # Target
+            driving_resized # Driving
+        ])
+        
+        # --- END SIMULATION ---
+        
+        # Convert the result back to av.VideoFrame for output
+        return av.VideoFrame.from_ndarray(animated_result_np, format="bgr24")
+
+
+# --- UI Layout: Main Application ---
 
 def main_app():
-    
-    st.title("🎬 Deepfake Animator Agent 🤖")
-    st.subheader("Animate any face using the First Order Motion Model (FOMM)")
-    
-    st.markdown("""
-        ---
-        **Welcome!** Follow the 3 simple steps below to bring a static image to life:
-    """)
-    
-    # Initialize sample images
-    sample_images = initialize_dummy_data()
-    image_names = list(sample_images.keys())
+    st.title("🎥 Real-Time Animator Agent")
+    st.subheader("Animate an image instantly using your live webcam motion!")
+    st.markdown("---")
 
-    # --- Step 1: Select/Upload Target Image ---
-    st.header("1️⃣ Select Your Avatar (Target Image)")
+    # --- Step 1: Select Target Image ---
+    st.header("1️⃣ Select Target Image (Avatar)")
     
+    target_data = initialize_target_data()
+    image_names = list(target_data.keys())
+
     col1, col2 = st.columns([1, 2])
     
     with col1:
         selected_name = st.radio(
-            "Choose a pre-loaded avatar or upload your own:",
+            "Choose a target image:",
             image_names,
             index=0,
-            key="avatar_select",
-            help="This is the image whose face will be animated."
+            key="target_select"
         )
         
         if selected_name == "Upload Custom...":
             uploaded_file = st.file_uploader(
-                "Upload a custom face image (.jpg, .png)",
+                "Upload a custom face/object image 🖼️",
                 type=["jpg", "png"],
                 key="custom_upload"
             )
             if uploaded_file:
-                target_image = Image.open(uploaded_file)
-                st.session_state['target_image'] = target_image
+                st.session_state['target_image'] = Image.open(uploaded_file)
             else:
                 st.session_state['target_image'] = None
-                
         else:
-            target_image = sample_images[selected_name]
-            st.session_state['target_image'] = target_image
+            st.session_state['target_image'] = target_data[selected_name]
 
     with col2:
-        st.markdown("### Preview")
+        st.markdown("### Target Preview")
         if st.session_state['target_image']:
-            st.image(st.session_state['target_image'], caption=selected_name, use_column_width=True)
+            st.image(st.session_state['target_image'], caption=selected_name, width=256)
         else:
-            st.warning("Please select or upload a target image to animate.")
+            st.warning("Please select or upload a target image.")
             
     st.markdown("---")
 
-    # --- Step 2: Provide Motion Source (Driving Video) ---
-    st.header("2️⃣ Provide the Motion Source (Driving Video)")
-    
-    driving_video_file = st.file_uploader(
-        "Upload a video file (.mp4, .mov) containing the desired action/speech:",
-        type=["mp4", "mov"],
-        key="driving_video_upload"
-    )
+    # --- Step 2: Real-Time Animation ---
+    st.header("2️⃣ Live Animation & Recording")
 
-    if driving_video_file:
-        st.session_state['driving_video'] = driving_video_file
-        st.video(driving_video_file, format='video/mp4', start_time=0)
-    else:
-        st.session_state['driving_video'] = None
-        st.info("Upload a video of someone speaking or acting. The face in your target image will mimic this motion.")
-
-    st.markdown("---")
-
-    # --- Step 3: Animate! ---
-    st.header("3️⃣ Generate Animated Deepfake")
-    
-    if st.session_state.get('target_image') and st.session_state.get('driving_video'):
+    if st.session_state.get('target_image'):
+        # Convert PIL Image to NumPy array (RGB) for the processor
+        target_img_np = np.array(st.session_state['target_image'].convert("RGB"))
         
-        # Use a large, friendly button
-        if st.button("🚀 START ANIMATION GENERATION", type="primary", use_container_width=True):
-            st.empty() # Clear previous messages
+        st.info("💡 **Webcam Activated:** Look into the camera to drive the animation. The animation will appear below.")
+        
+        # Use a sidebar for controls
+        st.sidebar.header("Agent Controls")
+        
+        # Start the webcam stream and real-time processing
+        ctx = webrtc_stream(
+            key="fomm-stream",
+            mode=WebRtcMode.SENDRECV,
+            rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
+            video_processor_factory=lambda: FommVideoProcessor(target_img_np),
+            media_stream_constraints={
+                "video": True,
+                "audio": False
+            },
+            # Enable recording to get the download option
+            async_transform=True,
+            in_sidebar=False
+        )
+
+        if ctx.state.playing:
+            st.success("🟢 Live Animation Active!")
             
-            # Run the placeholder function
-            with st.spinner("🧠 Deepfake Agent is learning and generating..."):
-                animated_result = run_fomm_animation(
-                    target_image=st.session_state['target_image'],
-                    driving_video=st.session_state['driving_video']
+            # --- Step 3: Download Option (appears after recording) ---
+            st.markdown("---")
+            st.header("3️⃣ Download Video")
+
+            # The actual video recording and download logic is complex in a real FOMM setup.
+            # Here we provide the UI structure for the recorded video.
+            
+            if st.sidebar.button("💾 Finalize & Download Video"):
+                st.warning("Recording/Finalization initiated. This requires implementing video buffer capture in FommVideoProcessor.")
+                
+                # Placeholder for video data (e.g., loading a pre-recorded file after processing)
+                # In a production app, you would process the recorded buffer from ctx.video_processor
+                
+                # SIMULATION: Create dummy video data for download button
+                # This needs to be replaced with actual MP4/GIF data
+                dummy_video_bytes = b"This is a placeholder for your video file content."
+                st.session_state['animated_video_data'] = dummy_video_bytes
+                
+                # Show the download button
+                st.download_button(
+                    label="⬇️ Download Animated Result (MP4)",
+                    data=st.session_state['animated_video_data'],
+                    file_name="realtime_fomm_animation.mp4",
+                    mime="video/mp4",
+                    type="primary"
                 )
-            
-            st.subheader("✨ Final Animated Result")
-            st.video(animated_result) # Will display the dummy result if not replaced
-            st.download_button(
-                label="⬇️ Download Animated Video",
-                data="dummy_video_data", # Replace with actual video data
-                file_name="animated_deepfake.mp4",
-                mime="video/mp4"
-            )
-            
-            st.balloons()
-            
-    else:
-        st.error("🛑 Please complete Steps 1 and 2 before starting the animation.")
+                st.balloons()
         
-    st.markdown("---")
-    st.sidebar.markdown(f"**Powered by:** First Order Motion Model (FOMM)")
+    else:
+        st.error("🛑 Please complete Step 1 (Select Target Image) to start the real-time stream.")
+
 
 if __name__ == "__main__":
     main_app()

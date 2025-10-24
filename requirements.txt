@@ -1,4 +1,6 @@
-streamlit 
-pillow 
-streamlit-webrtc 
-opencv-python-headless
+streamlit
+pillow
+opencv-python-headless  # Use 'headless' for environments without a display/GUI
+streamlit-webrtc        # Required for the real-time webcam input
+numpy                   # Essential for image/video manipulation
+pyngrok                 # If still using the Colab setup with ngrok
